@@ -7,14 +7,12 @@ def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
 
 def list_directory(current_path):
-    """Menampilkan isi direktori dan mengembalikan daftar item."""
     try:
         items = os.listdir(current_path)
     except PermissionError:
         print("\n[!] Access denied to this folder.")
         return []
 
-    # Filter: hanya tampilkan folder atau file .blend
     filtered_items = [
         item for item in items 
         if os.path.isdir(os.path.join(current_path, item)) or item.endswith('.blend')
@@ -23,7 +21,6 @@ def list_directory(current_path):
     return filtered_items
 
 def file_browser(start_path):
-    """Navigasi folder secara interaktif menggunakan angka."""
     current_path = os.path.abspath(start_path)
     
     while True:
@@ -69,11 +66,9 @@ def file_browser(start_path):
             input("Press Enter to continue...")
 
 def parse_frames(frame_str):
-    """Mengonversi string '1, 5, 10-15' menjadi list integer unik dan terurut."""
     frames = []
     if not frame_str:
         return frames
-    # Bersihkan spasi dan pisahkan berdasarkan koma
     parts = frame_str.replace(" ", "").split(",")
     for part in parts:
         try:
@@ -87,19 +82,15 @@ def parse_frames(frame_str):
     return sorted(list(set(frames)))
 
 def render_blender(filepath, settings):
-    """Menjalankan proses render menggunakan perintah blender (CLI)."""
     clear_screen()
     print(f"--- Starting Render ---")
     print(f"File: {filepath}\n")
-    
-    # Membangun argumen perintah berdasarkan settings
     args = []
     if settings['scene']:
         args.append(f'-S "{settings["scene"]}"')
     if settings['engine']:
         args.append(f'-E {settings["engine"]}')
-    
-    # Membangun perintah python-expr untuk pengaturan yang tidak ada flag CLI-nya
+
     py_parts = ["import bpy"]
     if settings['overwrite'] is not None:
         py_parts.append(f"bpy.context.scene.render.use_overwrite={settings['overwrite']}")
@@ -141,11 +132,9 @@ def render_blender(filepath, settings):
     input("\nPress Enter to return to menu...")
 
 def get_blender_scenes(filepath):
-    """Mendapatkan daftar scene dari file .blend menggunakan bpy.data.libraries.load."""
     if not os.path.exists(filepath):
         return []
     try:
-        # Membaca daftar scene tanpa membuka file secara penuh
         with bpy.data.libraries.load(filepath) as (data_from, data_to):
             return data_from.scenes
     except Exception as e:
@@ -153,7 +142,6 @@ def get_blender_scenes(filepath):
         return []
 
 def render_settings_menu(filepath):
-    """Menu untuk mengatur parameter render sebelum eksekusi."""
     settings = {
         "frames": None,
         "engine": None,
@@ -219,7 +207,6 @@ def render_settings_menu(filepath):
             settings['placeholder'] = True if val == 'y' else False if val == 'n' else None
 
 def load_config():
-    """Memuat konfigurasi dari file JSON."""
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     default_config = {"base_project_path": "F:/blender"}
     if not os.path.exists(config_path):
@@ -231,7 +218,6 @@ def load_config():
         return default_config
 
 def save_config(config):
-    """Menyimpan konfigurasi ke file JSON."""
     config_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
     try:
         with open(config_path, "w") as f:
@@ -241,7 +227,6 @@ def save_config(config):
         input("Press Enter...")
 
 def tools_settings_menu():
-    """Menu untuk mengatur preferensi tools."""
     while True:
         config = load_config()
         clear_screen()
