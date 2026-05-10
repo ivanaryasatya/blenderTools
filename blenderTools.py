@@ -2,6 +2,7 @@ import os
 import subprocess
 import bpy
 import json
+import datetime
 
 def clear_screen():
     os.system('cls' if os.name == 'nt' else 'clear')
@@ -247,6 +248,158 @@ def tools_settings_menu():
         elif choice == '0':
             break
 
+def folder_browser(start_path):
+    current_path = os.path.abspath(start_path)
+    while True:
+        clear_screen()
+        print(f"--- Folder Browser ---")
+        print(f"Current location: {current_path}\n")
+        
+        try:
+            items = [item for item in os.listdir(current_path) if os.path.isdir(os.path.join(current_path, item))]
+            items.sort()
+        except PermissionError:
+            print("\n[!] Access denied.")
+            items = []
+
+        print("0. [..] Go back to previous folder")
+        print("s. [SELECT THIS FOLDER]")
+        for i, item in enumerate(items, 1):
+            print(f"{i}. [FOLDER] {item}")
+        
+        print("\nq. Cancel and return to main menu")
+        choice = input("\nSelect number or 's' to select current: ").strip().lower()
+        
+        if choice == 'q': return None
+        if choice == 's': return current_path
+        if choice == '0':
+            current_path = os.path.dirname(current_path)
+            continue
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(items):
+                current_path = os.path.join(current_path, items[idx])
+            else:
+                print("\n[!] Invalid choice.")
+                input("Press Enter...")
+        except ValueError:
+            print("\n[!] Please enter a valid number.")
+            input("Press Enter...")
+
+def run_ffmpeg_conversion(folder_path, settings):
+    clear_screen()
+    print("--- Starting FFmpeg Conversion ---")
+    input_pattern = os.path.join(folder_path, settings['pattern'])
+    output_file = os.path.join(folder_path, f"{settings['output_name']}.{settings['format']}")
+    
+    codec_params = f"-c:v {settings['codec']}"
+    if settings['format'] == 'mp4':
+        codec_params += " -pix_fmt yuv420p"
+    elif settings['format'] == 'mov' and settings['codec'] == 'prores_ks':
+        codec_params += " -profile:v 4 -pix_fmt yuva444p10le"
+
+    command = f'ffmpeg -y -framerate {settings["fps"]} -i "{input_pattern}" {codec_params} "{output_file}"'
+    print(f"Executing: {command}\n")
+    try:
+        subprocess.run(command, shell=True)
+        print(f"\n[+] Conversion complete! Output: {output_file}")
+    except Exception as e:
+        print(f"\n[!] An error occurred during conversion: {e}")
+    input("\nPress Enter to return to menu...")
+
+def video_conversion_menu(folder_path):
+    settings = {
+        "fps": "24",
+        "pattern": "frame_%04d.png",
+        "format": "mp4",
+        "codec": "libx264",
+        "output_name": "output_video"
+    }
+    while True:
+        clear_screen()
+        print(f"--- IMAGE SEQUENCE TO VIDEO: {os.path.basename(folder_path)} ---")
+        print(f"1. Input Pattern (e.g. %04d.png) : {settings['pattern']}")
+        print(f"2. Frame Rate (FPS)              : {settings['fps']}")
+        print(f"3. Output Format                 : {settings['format'].upper()}")
+        print(f"4. Video Codec                   : {settings['codec']}")
+        print(f"5. Output Filename               : {settings['output_name']}")
+        print("-" * 30)
+        print("0. START CONVERSION")
+        print("q. Back")
+        choice = input("\nSelect number to edit (or 0 to proceed): ").strip().lower()
+        if choice == '0':
+            run_ffmpeg_conversion(folder_path, settings)
+            break
+        elif choice == 'q': break
+        elif choice == '1': settings['pattern'] = input("Enter pattern (e.g. frame_%04d.png): ")
+        elif choice == '2': settings['fps'] = input("Enter FPS: ")
+        elif choice == '3':
+            val = input("Select Format (1: MP4, 2: MOV Transparent): ")
+            if val == '1': settings['format'], settings['codec'] = 'mp4', 'libx264'
+            elif val == '2': settings['format'], settings['codec'] = 'mov', 'prores_ks'
+        elif choice == '4': settings['codec'] = input("Enter Codec (e.g. libx264, prores_ks, png): ")
+        elif choice == '5': settings['output_name'] = input("Enter output name (without extension): ")
+
+def render_calculator_menu():
+    clear_screen()
+    print("=== RENDER TIME CALCULATOR ===")
+    try:
+        total_frames = int(input("Total Frames                      : ") or 0)
+        current_frame = int(input("Current Frame (being rendered)   : ") or 0)
+        
+        print("\nFormat: Detik (misal: 45) atau Menit:Detik (misal: 1:30)")
+        t_input = input("Time per Frame                    : ")
+        if ":" in t_input:
+            parts = list(map(int, t_input.split(":")))
+            t_sec = parts[0] * 60 + parts[1] if len(parts) == 2 else parts[0]
+        else:
+            t_sec = int(t_input)
+
+        now = datetime.datetime.now()
+        
+        start_choice = input("\nGunakan waktu sekarang sebagai waktu mulai? (y/n): ").lower()
+        if start_choice == 'n':
+            start_str = input("Masukkan waktu mulai (HH:MM): ")
+            h, m = map(int, start_str.split(":"))
+            calc_base_time = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            # Jika waktu input lebih besar dari sekarang, diasumsikan mulai kemarin
+            if calc_base_time > now:
+                calc_base_time -= datetime.timedelta(days=1)
+        else:
+            calc_base_time = now
+
+        # Sisa frame (asumsi frame saat ini sedang diproses)
+        remaining_frames = total_frames - current_frame + 1
+        if remaining_frames < 0: remaining_frames = 0
+        
+        remaining_seconds = remaining_frames * t_sec
+        
+        # Jika menggunakan waktu mulai manual, kita hitung ETA dari waktu sekarang berdasarkan sisa kerja
+        eta = now + datetime.timedelta(seconds=remaining_seconds)
+        
+        # Total estimasi waktu dari awal sampai akhir
+        total_duration_sec = total_frames * t_sec
+        original_finish = calc_base_time + datetime.timedelta(seconds=total_duration_sec)
+
+        print("\n" + "="*40)
+        print(f"Sisa Frame         : {remaining_frames}")
+        print(f"Sisa Waktu Tunggu  : {datetime.timedelta(seconds=remaining_seconds)}")
+        print(f"ESTIMASI SELESAI   : {eta.strftime('%H:%M:%S')} ({eta.strftime('%d %b')})")
+        
+        if start_choice == 'n':
+            print("-" * 40)
+            print(f"Estimasi Total Durasi : {datetime.timedelta(seconds=total_duration_sec)}")
+            print(f"Target Awal Selesai   : {original_finish.strftime('%H:%M:%S')}")
+        
+        print("="*40)
+        
+    except ValueError:
+        print("\n[!] Input tidak valid. Pastikan memasukkan angka atau format waktu yang benar.")
+    except Exception as e:
+        print(f"\n[!] Terjadi kesalahan: {e}")
+    
+    input("\nTekan Enter untuk kembali ke menu...")
+
 def main_menu():
     while True:
         config = load_config()
@@ -255,7 +408,9 @@ def main_menu():
         clear_screen()
         print("=== BLENDER TOOLS MENU ===")
         print("1. Render .blend File")
-        print("2. Tools Settings")
+        print("2. Image Sequence to Video (FFmpeg)")
+        print("3. Render Time Calculator")
+        print("4. Tools Settings")
         print("0. Exit")
         
         choice = input("\nSelect menu: ")
@@ -265,6 +420,12 @@ def main_menu():
             if selected_file:
                 render_settings_menu(selected_file)
         elif choice == '2':
+            selected_folder = folder_browser(base_project_path)
+            if selected_folder:
+                video_conversion_menu(selected_folder)
+        elif choice == '3':
+            render_calculator_menu()
+        elif choice == '4':
             tools_settings_menu()
         elif choice == '0':
             print("Exiting program...")
